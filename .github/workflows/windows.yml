@@ -11,8 +11,6 @@ jobs:
         ver:
           - { cv: 4.11.0, jdk: 8, ant: 1.10.14 }
         list:
-          - { win_ver: 2019, vs_name: vs2015, vs_ver: v140 }
-          - { win_ver: 2019, vs_name: vs2017, vs_ver: v141 }
           - { win_ver: 2019, vs_name: vs2019, vs_ver: v142 }
           - { win_ver: 2022, vs_name: vs2022, vs_ver: v143 }
         arch:
@@ -27,11 +25,8 @@ jobs:
             mt,
           ]
         exclude:
-          - list: { win_ver: 2019, vs_name: vs2015, vs_ver: v140 }
+          - list: { win_ver: 2019, vs_name: vs2019, vs_ver: v142 }
             arch: arm64
-          - list: { win_ver: 2019, vs_name: vs2017, vs_ver: v141 }
-            arch: arm64
-          - list: { win_ver: 2022, vs_name: vs2022, vs_ver: v143 }
 
     runs-on: windows-${{ matrix.list.win_ver }}
 
@@ -78,7 +73,7 @@ jobs:
           cp ${{ env.BUILD_OPTIONS }} opencv-${{ matrix.ver.cv }}
 
       # 编译
-      # https://github.com/ilammy/msvc-dev-cmd
+      # https://github.com/ilammy/msvc-dev-cmd  
       #- uses: ilammy/msvc-dev-cmd@v1
 
       - name: build
@@ -160,7 +155,7 @@ jobs:
           tree artifacts
 
       # 创建release 上传release
-      # https://github.com/marketplace/actions/create-release
+      # https://github.com/marketplace/actions/create-release  
       - name: upload-windows
         uses: ncipollo/release-action@v1
         with:
