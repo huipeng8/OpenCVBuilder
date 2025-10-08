@@ -118,16 +118,26 @@ jobs:
       # 检出代码
       - uses: actions/checkout@v5
 
-      # 检查是否有tag，并设置变量
-      - name: Detect tag or set default
-        id: tag
+      # 获取所有的git log和tag
+      - name: Unshallow
+        run: git fetch --prune --unshallow
+
+      # 获取git log 从 previousTag 到 lastTag
+      - name: Get git log
+        id: git-log
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="default"
-          fi
-          echo "release_tag=$TAG" >> $GITHUB_ENV
+          previousTag=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`)
+          lastTag=$(git describe --abbrev=0 --tags)
+          echo "previousTag:$previousTag ~ lastTag:$lastTag"
+          log=$(git log $previousTag..$lastTag --pretty=format:'- %cd %an: %s\n' --date=format:'%Y-%m-%d %H:%M:%S')
+          echo "$log"
+          echo "log_state="$log"" >> $GITHUB_ENV
+
+      # 创建Changelog文件 triggered by git tag push
+      - name: Generate Changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo -e '${{ env.log_state }}' > release.md
 
       # 下载artifact
       - name: download
@@ -141,10 +151,10 @@ jobs:
           tree artifacts
 
       # 创建release 上传release
+      # https://github.com/marketplace/actions/create-release  
       - name: upload-windows
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ env.release_tag }}
           prerelease: false
           bodyFile: release.md
           artifacts: artifacts/*/*.7z
