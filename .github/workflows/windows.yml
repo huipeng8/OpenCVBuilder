@@ -9,20 +9,25 @@ jobs:
       fail-fast: false
       matrix:
         ver:
-          - { cv: 4.11.0, jdk: 8, ant: 1.10.14 }
+          - { cv: 4.12.0 } # 改为4.12.0
         list:
           - { win_ver: 2022, vs_name: vs2022, vs_ver: v143 }
         arch:
           [
             x64,
             x86,
-#            arm64,
           ]
         crt:
           [
             md,
             mt,
           ]
+        # exclude: # 移除ARM构建
+        #   - list: { win_ver: 2019, vs_name: vs2015, vs_ver: v140 }
+        #     arch: arm64
+        #   - list: { win_ver: 2019, vs_name: vs2017, vs_ver: v141 }
+        #     arch: arm64
+        #   - list: { win_ver: 2022, vs_name: vs2022, vs_ver: v143 }
 
     runs-on: windows-${{ matrix.list.win_ver }}
 
@@ -32,30 +37,30 @@ jobs:
       BUILD_SCRIPT: build-opencv4-win.ps1
       BUILD_OPTIONS: opencv4_cmake_options.txt
       PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
-      JAVA_PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}-java
+      # JAVA_PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}-java
 
     steps:
       # Setup JDK
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '${{ matrix.ver.jdk }}'
-          distribution: 'adopt'
+      # - name: Set up JDK
+      #   uses: actions/setup-java@v4
+      #   with:
+      #     java-version: '${{ matrix.ver.jdk }}'
+      #     distribution: 'adopt'
 
-      - uses: cedx/setup-ant@v2
-        with:
-          optional-tasks: true
-          version: ${{ matrix.ver.ant }}
+      # - uses: cedx/setup-ant@v2
+      #   with:
+      #     optional-tasks: true
+      #     version: ${{ matrix.ver.ant }}
 
-      - name: ant version
-        run: ant -version
+      # - name: ant version
+      #   run: ant -version
 
       # 检出代码
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       # 检出opencv
       - name: checkout opencv
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           repository: opencv/opencv
           path: opencv-${{ matrix.ver.cv }}
@@ -84,17 +89,17 @@ jobs:
           7z a ${{ env.PKG_NAME }}.7z ${{ env.PKG_NAME }}
           rm ${{ env.PKG_NAME }} -r -fo
 
-      - name: build java
-        shell: powershell
-        run: |
-          cd opencv-${{ matrix.ver.cv }}
-          .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }} -BuildJava
+      # - name: build java
+      #   shell: powershell
+      #   run: |
+      #     cd opencv-${{ matrix.ver.cv }}
+      #     .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }} -BuildJava
 
-      - name: 7zip java
-        run: |
-          cp -r opencv-${{ matrix.ver.cv }}/build-${{ matrix.arch }}-${{ matrix.list.vs_ver }}-${{ matrix.crt }}/install/java ${{ env.JAVA_PKG_NAME }}
-          7z a ${{ env.JAVA_PKG_NAME }}.7z ${{ env.JAVA_PKG_NAME }}
-          rm ${{ env.JAVA_PKG_NAME }} -r -fo
+      # - name: 7zip java
+      #   run: |
+      #     cp -r opencv-${{ matrix.ver.cv }}/build-${{ matrix.arch }}-${{ matrix.list.vs_ver }}-${{ matrix.crt }}/install/java ${{ env.JAVA_PKG_NAME }}
+      #     7z a ${{ env.JAVA_PKG_NAME }}.7z ${{ env.JAVA_PKG_NAME }}
+      #     rm ${{ env.JAVA_PKG_NAME }} -r -fo
 
       # 上传artifact
       - name: upload lib
@@ -103,11 +108,11 @@ jobs:
           name: ${{ env.PKG_NAME }}
           path: ${{ env.PKG_NAME }}.7z
 
-      - name: upload java lib
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.JAVA_PKG_NAME }}
-          path: ${{ env.JAVA_PKG_NAME }}.7z
+      # - name: upload java lib
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ${{ env.JAVA_PKG_NAME }}
+      #     path: ${{ env.JAVA_PKG_NAME }}.7z
 
   release:
     needs: [ windows ]
@@ -116,32 +121,32 @@ jobs:
 
     steps:
       # 检出代码
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       # 获取所有的git log和tag
-      - name: Unshallow
-        run: git fetch --prune --unshallow
+#      - name: Unshallow
+#        run: git fetch --prune --unshallow
 
       # 获取git log 从 previousTag 到 lastTag
-      - name: Get git log
-        id: git-log
-        run: |
-          previousTag=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`)
-          lastTag=$(git describe --abbrev=0 --tags)
-          echo "previousTag:$previousTag ~ lastTag:$lastTag"
-          log=$(git log $previousTag..$lastTag --pretty=format:'- %cd %an: %s\n' --date=format:'%Y-%m-%d %H:%M:%S')
-          echo "$log"
-          echo "log_state="$log"" >> $GITHUB_ENV
+#      - name: Get git log
+#        id: git-log
+#        run: |
+#          previousTag=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`)
+#          lastTag=$(git describe --abbrev=0 --tags)
+#          echo "previousTag:$previousTag ~ lastTag:$lastTag"
+#          log=$(git log $previousTag..$lastTag --pretty=format:'- %cd %an: %s\n' --date=format:'%Y-%m-%d %H:%M:%S')
+#          echo "$log"
+#          echo "log_state="$log"" >> $GITHUB_ENV
 
       # 创建Changelog文件 triggered by git tag push
-      - name: Generate Changelog
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          echo -e '${{ env.log_state }}' > release.md
+#      - name: Generate Changelog
+#        if: startsWith(github.ref, 'refs/tags/')
+#        run: |
+#          echo -e '${{ env.log_state }}' > release.md
 
       # 下载artifact
       - name: download
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
