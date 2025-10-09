@@ -79,7 +79,7 @@
 -DBUILD_opencv_objdetect=OFF
 -DBUILD_opencv_stitching=OFF
 -DBUILD_opencv_ml=OFF
--DBUILD_opencv_world=OFF
+-DBUILD_opencv_world=ON
 -DWITH_ADE=OFF
 -DWITH_TBB=OFF
 -DWITH_HPX=OFF
