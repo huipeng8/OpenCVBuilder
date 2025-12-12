@@ -1,64 +1,52 @@
-# ==============================
-# 总体配置
-# ==============================
--DBUILD_opencv_world=ON      # 构建单一的 opencv_world 库
--DBUILD_SHARED_LIBS=OFF      # 构建静态库
+# 启用 world 模块（生成单个 DLL）
+-DBUILD_opencv_world=ON
 
-# 关闭 Python binding
+# 禁用 Python（符合要求）
 -DBUILD_opencv_python2=OFF
 -DBUILD_opencv_python3=OFF
 
-# 启用 contrib 模块
--DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules  # 确保指向正确的 opencv_contrib 路径
+# 启用 contrib（必须指定路径）
+-DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules
 
-# 启用核心模块
+# 启用 DNN（含 Protobuf）
+-DBUILD_opencv_dnn=ON
+-DWITH_PROTOBUF=ON
+
+# 图像编解码器（保持完整支持）
+-DBUILD_ZLIB=ON
+-DBUILD_JPEG=ON -DWITH_JPEG=ON
+-DBUILD_PNG=ON -DWITH_PNG=ON
+-DBUILD_TIFF=ON -DWITH_TIFF=ON
+-DBUILD_WEBP=ON -DWITH_WEBP=ON
+-DBUILD_OPENEXR=ON -DWITH_OPENEXR=ON
+-DBUILD_JASPER=ON -DWITH_JASPER=ON
+-DWITH_IMGCODEC_GIF=ON
+-DWITH_IMGCODEC_HDR=ON
+-DWITH_IMGCODEC_PXM=ON
+-DWITH_IMGCODEC_SUNRASTER=ON
+
+# 视频 I/O（可选，但推荐）
+-DBUILD_opencv_videoio=ON
+-DWITH_MSMF=ON
+-DWITH_VFW=ON
+-DWITH_FFMPEG=OFF  # 注意：若无预编译 FFmpeg，建议关闭，避免链接失败
+
+# GUI（可选）
+-DBUILD_opencv_highgui=ON
+-DWITH_WIN32UI=ON
+
+# 核心模块（world 会自动包含，但显式开启更安全）
 -DBUILD_opencv_core=ON
 -DBUILD_opencv_imgproc=ON
 -DBUILD_opencv_imgcodecs=ON
 -DBUILD_opencv_features2d=ON
 -DBUILD_opencv_calib3d=ON
 -DBUILD_opencv_flann=ON
--DBUILD_opencv_ml=ON
 
-# 启用 DNN 模块
--DBUILD_opencv_dnn=ON
--DWITH_PROTOBUF=ON           # DNN 依赖 Protobuf
-
-# 图像编解码器
--DBUILD_ZLIB=ON
--DBUILD_JPEG=ON
--DWITH_JPEG=ON
--DWITH_JPEGXL=OFF
--DBUILD_JASPER=ON
--DWITH_JASPER=ON
--DBUILD_OPENEXR=ON
--DWITH_OPENEXR=ON
--DBUILD_OPENJPEG=ON
--DWITH_OPENJPEG=ON
--DBUILD_PNG=ON
--DWITH_PNG=ON
--DBUILD_TIFF=ON
--DWITH_TIFF=ON
--DBUILD_WEBP=ON
--DWITH_WEBP=ON
--DWITH_AVIF=OFF
--DWITH_IMGCODEC_HDR=ON
--DWITH_IMGCODEC_SUNRASTER=ON
--DWITH_IMGCODEC_PXM=ON
--DWITH_IMGCODEC_PFM=ON
--DWITH_IMGCODEC_GIF=ON
-
-# 视频 I/O
--DBUILD_opencv_videoio=ON
--DWITH_FFMPEG=ON             # 使用内置 FFmpeg
--DWITH_VFW=ON                # Windows Video for Windows 支持
--DWITH_MSMF=ON               # Media Foundation（现代 Windows 视频捕获）
-
-# GUI
--DBUILD_opencv_highgui=ON
--DWITH_WIN32UI=ON            # Windows 原生窗口支持
-
-# 其他选项
--DBUILD_EXAMPLES=OFF         # 不构建示例程序
--DBUILD_TESTS=OFF            # 不构建测试程序
--DBUILD_PERF_TESTS=OFF       # 不构建性能测试程序
+# 禁用不需要的
+-DBUILD_TESTS=OFF
+-DBUILD_EXAMPLES=OFF
+-DBUILD_DOCS=OFF
+-DBUILD_PERF_TESTS=OFF
+-DBUILD_JAVA=OFF
+-DBUILD_FAT_JAVA_LIB=OFF
