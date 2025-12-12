@@ -161,8 +161,9 @@ if (Test-Path -Path $OutPutPath) {
 New-Item -Path $OutPutPath -ItemType Directory | Out-Null
 
 $absOutPath = (Resolve-Path $OutPutPath).Path
-$genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
+$genArgs += "-S ."
 $genArgs += "-B$absOutPath"
+$genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
 
 # === Generate ===
 $genCall = "cmake " + ($genArgs -join ' ')
