@@ -1,147 +1,177 @@
 <#
-.SYNOPSIS
-Build OpenCV for Windows
+.SYNOPSIS build opencv for windows by benjaminwan
+.DESCRIPTION
+This is a powershell script for building OpenCV in Windows.
+Put this script in the OpenCV root path, then run: .\build-opencv-win.ps1
 
-.PARAMETER VsArch
-Target architecture: x64 (default), x86, arm64, arm64ec
-
-.PARAMETER VsVer
-Visual Studio toolset: v143 (VS2022), v142 (VS2019), etc.
-
-.PARAMETER VsCRT
-CRT linkage: md (dynamic) or mt (static)
-
-.PARAMETER BuildJava
-Enable Java bindings (default: false)
-
-.PARAMETER BuildType
-CMake build type: Release (default), Debug, etc.
+ATTENTION:
+  Set ExecutionPolicy before running: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #>
 
 param (
-    [string]$VsArch = "x64",
-    [string]$VsVer = "v143",
-    [string]$VsCRT = "md",
-    [switch]$BuildJava = $false,
-    [string]$BuildType = "Release"
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('x64', 'x86', 'arm64', 'arm64ec')]
+    [string] $VsArch = "x64",
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('v140', 'v141', 'v142', 'v143')]
+    [string] $VsVer = 'v143',
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('mt', 'md')]
+    [string] $VsCRT = 'md',
+
+    [Parameter(Mandatory = $false)]
+    [switch] $BuildJava = $false,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Release', 'Debug', 'MinSizeRel', 'RelWithDebInfo')]
+    [string] $BuildType = 'Release'
 )
 
 $ErrorActionPreference = "Stop"
+Clear-Host
+Write-Host "Params: VsArch=$VsArch VsVer=$VsVer VsCRT=$VsCRT BuildJava=$BuildJava BuildType=$BuildType"
 
-Write-Host "Build Parameters:"
-Write-Host "  Architecture : $VsArch"
-Write-Host "  VS Toolset   : $VsVer"
-Write-Host "  CRT Linkage  : $VsCRT"
-Write-Host "  Build Type   : $BuildType"
-Write-Host "  Build Java   : $BuildJava"
-Write-Host ""
+$genArgs = @()
 
-# Map architecture to CMake -A value
+# === Architecture mapping ===
 switch ($VsArch) {
-    "x64"      { $ArchFlag = "x64" }
-    "x86"      { $ArchFlag = "Win32" }
-    "arm64"    { $ArchFlag = "ARM64" }
-    "arm64ec"  { $ArchFlag = "ARM64EC" }
+    'x64'      { $ArchFlag = 'x64'; $SystemProcessor = 'AMD64' }
+    'x86'      { $ArchFlag = 'Win32'; $SystemProcessor = 'x86' }
+    'arm64'    { $ArchFlag = 'ARM64'; $SystemProcessor = 'ARM64' }
+    'arm64ec'  { $ArchFlag = 'ARM64EC'; $SystemProcessor = 'ARM64EC' }
     default { throw "Unsupported architecture: $VsArch" }
 }
 
-# Map architecture to CMAKE_SYSTEM_PROCESSOR (critical for IPPICV)
-switch ($VsArch) {
-    "x64"      { $SystemProcessor = "AMD64" }
-    "x86"      { $SystemProcessor = "x86" }
-    "arm64"    { $SystemProcessor = "ARM64" }
-    "arm64ec"  { $SystemProcessor = "ARM64EC" }
-    default { throw "Unsupported architecture for CMAKE_SYSTEM_PROCESSOR: $VsArch" }
-}
-
-# Generator name (no arch suffix)
-switch ($VsVer) {
-    "v140" { $generator = "Visual Studio 14 2015" }
-    "v141" { $generator = "Visual Studio 15 2017" }
-    "v142" { $generator = "Visual Studio 16 2019" }
-    "v143" { $generator = "Visual Studio 17 2022" }
+# === Generator ===
+$generator = switch ($VsVer) {
+    'v140' { 'Visual Studio 14 2015' }
+    'v141' { 'Visual Studio 15 2017' }
+    'v142' { 'Visual Studio 16 2019' }
+    'v143' { 'Visual Studio 17 2022' }
     default { throw "Unsupported VS version: $VsVer" }
 }
 
-# Build directory
-$OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
-if (!(Test-Path -Path $OutPutPath)) {
-    New-Item -Path $OutPutPath -ItemType Directory | Out-Null
+if ($VsArch -eq 'x86') {
+    $genArgs += "-G '$generator'"
+} else {
+    $genArgs += "-G '$generator $ArchFlag'"
 }
-$absOutPath = (Resolve-Path $OutPutPath).Path
-Write-Host "Build directory: $absOutPath"
 
-# CMake arguments as array
-$cmakeArgs = @(
-    "-S", ".",
-    "-B", $absOutPath,
-    "-G", $generator,
-    "-A", $ArchFlag,
-    "-T", "$VsVer,host=x64",
-    "-DCMAKE_SYSTEM_NAME=Windows",
-    "-DCMAKE_SYSTEM_PROCESSOR=$SystemProcessor",   # ←← FIXED: Use correct processor name
-    "-DCMAKE_BUILD_TYPE=$BuildType",
-    "-DCMAKE_CONFIGURATION_TYPES=$BuildType",
-    "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
-)
+# === Toolset & system info ===
+$genArgs += "-T $VsVer,host=x64"
+$genArgs += "-DCMAKE_SYSTEM_NAME=Windows"
+$genArgs += "-DCMAKE_SYSTEM_PROCESSOR=$SystemProcessor"  # Use correct processor name for IPP
+$genArgs += "-DCMAKE_BUILD_TYPE=$BuildType"
+$genArgs += "-DCMAKE_CONFIGURATION_TYPES=$BuildType"
 
-# Load custom options
+# === Load base CMake options ===
 $OptionsFile = "opencv4_cmake_options.txt"
 if (!(Test-Path -Path $OptionsFile -PathType Leaf)) {
     Write-Error "Error: Cannot find $OptionsFile"
     exit 1
 }
-Get-Content $OptionsFile | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -and !$line.StartsWith("#")) {
-        $cmakeArgs += $line
-    }
+Get-Content "$OptionsFile" | ForEach-Object {
+    if ($_ -match '^\s*[^#;]') { $genArgs += $_.Trim() }  # Skip comments and empty lines
 }
 
-# CRT linkage
-if ($VsCRT -eq "mt") {
-    $cmakeArgs += "-DBUILD_WITH_STATIC_CRT=ON"
+# === Architecture-specific fixes ===
+if ($VsArch -in @('arm64', 'arm64ec')) {
+    $genArgs += '-DCV_ENABLE_INTRINSICS=OFF'
+}
+
+# === CRT linkage and build strategy ===
+if ($VsCRT -eq 'mt') {
+    # /MT: Static, minimal, no IPP
+    $genArgs += '-DBUILD_SHARED_LIBS=OFF'
+    $genArgs += '-DBUILD_WITH_STATIC_CRT=ON'
+    $genArgs += '-DWITH_IPP=OFF'               # Critical!
+    $genArgs += '-DBUILD_opencv_dnn=OFF'
+    $genArgs += '-DBUILD_opencv_videoio=OFF'
+    $genArgs += '-DBUILD_opencv_highgui=OFF'
+    $genArgs += '-DWITH_WIN32UI=OFF'
+    $genArgs += '-DWITH_FFMPEG=OFF'
+    $genArgs += '-DWITH_MSMF=OFF'
+    $genArgs += '-DWITH_VFW=OFF'
+    $genArgs += '-DBUILD_opencv_gapi=OFF'
+    $genArgs += '-DBUILD_opencv_stitching=OFF'
+    $genArgs += '-DBUILD_opencv_rapid=OFF'
+    $genArgs += '-DBUILD_opencv_plot=OFF'
+    $genArgs += '-DBUILD_opencv_quality=OFF'
+    $genArgs += '-DBUILD_opencv_saliency=OFF'
+    $genArgs += '-DBUILD_opencv_wechat_qrcode=OFF'
+    $genArgs += '-DBUILD_opencv_text=OFF'
+    $genArgs += '-DBUILD_opencv_tracking=OFF'
+    $genArgs += '-DBUILD_opencv_xphoto=OFF'
+    $genArgs += '-DBUILD_opencv_ximgproc=OFF'
+    $genArgs += '-DBUILD_opencv_xfeatures2d=OFF'
+    $genArgs += '-DBUILD_opencv_face=OFF'
+    $genArgs += '-DBUILD_opencv_fuzzy=OFF'
+    $genArgs += '-DBUILD_opencv_line_descriptor=OFF'
+    $genArgs += '-DBUILD_opencv_mcc=OFF'
+    $genArgs += '-DBUILD_opencv_objdetect=OFF'
+    $genArgs += '-DBUILD_opencv_optflow=OFF'
+    $genArgs += '-DBUILD_opencv_phase_unwrapping=OFF'
+    $genArgs += '-DBUILD_opencv_reg=OFF'
+    $genArgs += '-DBUILD_opencv_rgbd=OFF'
+    $genArgs += '-DBUILD_opencv_shape=OFF'
+    $genArgs += '-DBUILD_opencv_structured_light=OFF'
+    $genArgs += '-DBUILD_opencv_superres=OFF'
+    $genArgs += '-DBUILD_opencv_surface_matching=OFF'
+    $genArgs += '-DBUILD_opencv_videostab=OFF'
+    $genArgs += '-DBUILD_opencv_xobjdetect=OFF'
+    $genArgs += '-DBUILD_opencv_aruco=OFF'
+    $genArgs += '-DBUILD_opencv_bgsegm=OFF'
+    $genArgs += '-DBUILD_opencv_bioinspired=OFF'
+    $genArgs += '-DBUILD_opencv_ccalib=OFF'
+    $genArgs += '-DBUILD_opencv_datasets=OFF'
+    $genArgs += '-DBUILD_opencv_dpm=OFF'
+    $genArgs += '-DBUILD_opencv_hfs=OFF'
+    $genArgs += '-DBUILD_opencv_img_hash=OFF'
+    $genArgs += '-DBUILD_opencv_intensity_transform=OFF'
+    $genArgs += '-DBUILD_opencv_ml=OFF'
+    $genArgs += '-DBUILD_opencv_photo=OFF'
+    $genArgs += '-DBUILD_opencv_signal=OFF'
+    $genArgs += '-DBUILD_opencv_stereo=OFF'
+    $genArgs += '-DBUILD_opencv_xfeatures2d=OFF'
+    # Keep core modules: core, imgproc, imgcodecs (via world)
 } else {
-    $cmakeArgs += "-DBUILD_WITH_STATIC_CRT=OFF"
+    # /MD: Dynamic, full feature, with IPP
+    $genArgs += '-DBUILD_SHARED_LIBS=ON'
+    $genArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
+    # WITH_IPP defaults to ON when compatible; no need to force
 }
 
-# Java support
+# === Java support (rarely needed) ===
 if ($BuildJava) {
-    $cmakeArgs += "-DBUILD_JAVA=ON"
-    $cmakeArgs += "-DBUILD_opencv_java=ON"
+    $genArgs += '-DBUILD_JAVA=ON'
+    $genArgs += '-DBUILD_opencv_java=ON'
+} else {
+    $genArgs += '-DBUILD_JAVA=OFF'
+    $genArgs += '-DBUILD_opencv_java=OFF'
 }
 
-# ARM64 workaround
-if ($VsArch -eq "arm64" -or $VsArch -eq "arm64ec") {
-    $cmakeArgs += "-DCV_ENABLE_INTRINSICS=OFF"
+# === Output path (clean build) ===
+$OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
+if (Test-Path -Path $OutPutPath) {
+    Remove-Item -Recurse -Force $OutPutPath
+    Write-Host "Cleaned previous build directory: $OutPutPath"
 }
+New-Item -Path $OutPutPath -ItemType Directory | Out-Null
 
-# Run CMake configure
-Write-Host ""
-Write-Host "Running CMake configure..."
-& cmake @cmakeArgs
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "CMake configure failed!"
-    exit $LASTEXITCODE
-}
+$absOutPath = (Resolve-Path $OutPutPath).Path
+$genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
+$genArgs += "-B$absOutPath"
 
-# Run CMake build
-$cpuCount = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-$buildArgs = @(
-    "--build", $absOutPath,
-    "--config", $BuildType,
-    "--parallel", $cpuCount,
-    "--target", "install"
-)
+# === Generate ===
+$genCall = "cmake " + ($genArgs -join ' ')
+Write-Host $genCall -ForegroundColor Cyan
+Invoke-Expression $genCall
 
-Write-Host ""
-Write-Host "Running CMake build..."
-& cmake @buildArgs
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "CMake build failed!"
-    exit $LASTEXITCODE
-}
-
-Write-Host ""
-Write-Host "Build completed successfully."
-Write-Host "Install path: $absOutPath/install"
+# === Build ===
+$LogicalProcessorsNum = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+$buildArgs = @('--build', $absOutPath, '--config', $BuildType, '--parallel', $LogicalProcessorsNum, '--target', 'install')
+$buildCall = "cmake " + ($buildArgs -join ' ')
+Write-Host $buildCall -ForegroundColor Green
+Invoke-Expression $buildCall
