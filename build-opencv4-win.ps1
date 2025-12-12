@@ -2,7 +2,7 @@
 .SYNOPSIS build opencv for windows by benjaminwan
 .DESCRIPTION
 This is a powershell script for building OpenCV in Windows.
-Put this script in the OpenCV root path, then run: .\build-opencv-win.ps1
+Put this script in the OpenCV root path, then run: .\build-opencv4-win.ps1
 
 ATTENTION:
   Set ExecutionPolicy before running: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -29,7 +29,7 @@ param (
     [string] $BuildType = 'Release'
 )
 
-# === 新增：严格错误处理 ===
+# === 严格错误处理 ===
 $ErrorActionPreference = "Stop"
 
 Clear-Host
@@ -37,7 +37,7 @@ Write-Host "Params: VsArch=$VsArch VsVer=$VsVer VsCRT=$VsCRT BuildJava=$BuildJav
 
 $genArgs = @()
 
-# Map architecture to CMake flags
+# Map architecture to CMake -A values
 switch ($VsArch) {
     'x64'      { $ArchFlag = 'x64' }
     'x86'      { $ArchFlag = 'Win32' }
@@ -46,7 +46,7 @@ switch ($VsArch) {
     default { throw "Unsupported architecture: $VsArch" }
 }
 
-# === 新增：显式指定 generator ===
+# === Generator mapping (NO architecture suffix!) ===
 $generator = switch ($VsVer) {
     'v140' { 'Visual Studio 14 2015' }
     'v141' { 'Visual Studio 15 2017' }
@@ -55,27 +55,32 @@ $generator = switch ($VsVer) {
     default { throw "Unsupported VS version: $VsVer" }
 }
 
-if ($VsArch -eq 'x86') {
-    $genArgs += "-G '$generator'"
-} else {
-    $genArgs += "-G '$generator $ArchFlag'"
-}
+# ✅ CORRECT: Use -G without arch, and -A separately
+$genArgs += "-G '$generator'"
+$genArgs += "-A $ArchFlag"
 
-# Toolset and system info
+# Toolset (host=x64 is standard)
 $genArgs += "-T $VsVer,host=x64"
+
+# System info
 $genArgs += "-DCMAKE_SYSTEM_NAME=Windows"
 $genArgs += "-DCMAKE_SYSTEM_PROCESSOR=$ArchFlag"
 $genArgs += "-DCMAKE_BUILD_TYPE=$BuildType"
 $genArgs += "-DCMAKE_CONFIGURATION_TYPES=$BuildType"
 
-# Load custom options
+# Source and build directories (CRITICAL!)
+$genArgs += "-S ."  # ←←← Source is current directory
+
+# Load custom CMake options
 $OptionsFile = "opencv4_cmake_options.txt"
 if (!(Test-Path -Path $OptionsFile -PathType Leaf)) {
     Write-Error "Error: Cannot find $OptionsFile"
     exit 1
 }
-Get-Content "$OptionsFile" | ForEach-Object { 
-    if ($_ -match '\S') { $genArgs += $_ }  # Skip empty lines
+Get-Content "$OptionsFile" | ForEach-Object {
+    if ($_ -match '\S' -and -not $_.StartsWith('#')) {
+        $genArgs += $_
+    }
 }
 
 # ARM64 intrinsics workaround
@@ -90,16 +95,13 @@ if ($VsCRT -eq 'mt') {
     $genArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
 }
 
-# Java support
+# Java support (optional)
 if ($BuildJava) {
     $genArgs += '-DBUILD_JAVA=ON'
     $genArgs += '-DBUILD_opencv_java=ON'
 }
 
-# === 移除强制 WITH_OPENCL=ON ===
-# 让 opencv4_cmake_options.txt 控制所有选项
-
-# Output path
+# Output directory
 $OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
 if (!(Test-Path -Path $OutPutPath)) {
     New-Item -Path $OutPutPath -ItemType Directory | Out-Null
@@ -107,18 +109,19 @@ if (!(Test-Path -Path $OutPutPath)) {
 
 # Use absolute path for robustness
 $absOutPath = (Resolve-Path $OutPutPath).Path
-$genArgs += "-S ."                          # ←←← 新增这一行
 $genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
-$genArgs += "-B $absOutPath"                # 注意：加空格更安全（非必须，但推荐）
+$genArgs += "-B $absOutPath"  # ←←← Build directory
 
-# Generate
+# Generate command
 $genCall = "cmake " + ($genArgs -join ' ')
+Write-Host "CMake configure command:"
 Write-Host $genCall
 Invoke-Expression $genCall
 
-# Build
+# Build command
 $LogicalProcessorsNum = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 $buildArgs = @('--build', $absOutPath, '--config', $BuildType, '--parallel', $LogicalProcessorsNum, '--target', 'install')
 $buildCall = "cmake " + ($buildArgs -join ' ')
+Write-Host "CMake build command:"
 Write-Host $buildCall
 Invoke-Expression $buildCall
