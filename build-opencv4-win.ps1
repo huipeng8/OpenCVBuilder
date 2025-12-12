@@ -45,6 +45,15 @@ switch ($VsArch) {
     default { throw "Unsupported architecture: $VsArch" }
 }
 
+# Map architecture to CMAKE_SYSTEM_PROCESSOR (critical for IPPICV)
+switch ($VsArch) {
+    "x64"      { $SystemProcessor = "AMD64" }
+    "x86"      { $SystemProcessor = "x86" }
+    "arm64"    { $SystemProcessor = "ARM64" }
+    "arm64ec"  { $SystemProcessor = "ARM64EC" }
+    default { throw "Unsupported architecture for CMAKE_SYSTEM_PROCESSOR: $VsArch" }
+}
+
 # Generator name (no arch suffix)
 switch ($VsVer) {
     "v140" { $generator = "Visual Studio 14 2015" }
@@ -70,7 +79,7 @@ $cmakeArgs = @(
     "-A", $ArchFlag,
     "-T", "$VsVer,host=x64",
     "-DCMAKE_SYSTEM_NAME=Windows",
-    "-DCMAKE_SYSTEM_PROCESSOR=$ArchFlag",
+    "-DCMAKE_SYSTEM_PROCESSOR=$SystemProcessor",   # ←← FIXED: Use correct processor name
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DCMAKE_CONFIGURATION_TYPES=$BuildType",
     "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
