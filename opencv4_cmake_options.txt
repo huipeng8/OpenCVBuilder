@@ -1,3 +1,30 @@
+# ==============================
+# 总体配置
+# ==============================
+-DBUILD_opencv_world=ON      # 构建单一的 opencv_world 库
+-DBUILD_SHARED_LIBS=OFF      # 构建静态库
+
+# 关闭 Python binding
+-DBUILD_opencv_python2=OFF
+-DBUILD_opencv_python3=OFF
+
+# 启用 contrib 模块
+-DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules  # 确保指向正确的 opencv_contrib 路径
+
+# 启用核心模块
+-DBUILD_opencv_core=ON
+-DBUILD_opencv_imgproc=ON
+-DBUILD_opencv_imgcodecs=ON
+-DBUILD_opencv_features2d=ON
+-DBUILD_opencv_calib3d=ON
+-DBUILD_opencv_flann=ON
+-DBUILD_opencv_ml=ON
+
+# 启用 DNN 模块
+-DBUILD_opencv_dnn=ON
+-DWITH_PROTOBUF=ON           # DNN 依赖 Protobuf
+
+# 图像编解码器
 -DBUILD_ZLIB=ON
 -DBUILD_JPEG=ON
 -DWITH_JPEG=ON
@@ -20,70 +47,18 @@
 -DWITH_IMGCODEC_PXM=ON
 -DWITH_IMGCODEC_PFM=ON
 -DWITH_IMGCODEC_GIF=ON
--DWITH_ANDROID_MEDIANDK=OFF
--DBUILD_ANDROID_PROJECTS=OFF
--DBUILD_ANDROID_EXAMPLES=OFF
--DBUILD_ANDROID_SERVICE=OFF
--DBUILD_SHARED_LIBS=OFF
--DBUILD_FAT_JAVA_LIB=OFF
--DBUILD_JAVA=OFF
--DBUILD_TBB=OFF
--DBUILD_IPP_IW=OFF
--DBUILD_ITT=OFF
--DWITH_AVFOUNDATION=OFF
--DWITH_CAP_IOS=OFF
--DWITH_CAROTENE=OFF
--DWITH_CPUFEATURES=OFF
--DWITH_EIGEN=OFF
--DWITH_FFMPEG=OFF
--DWITH_GSTREAMER=OFF
--DWITH_GTK=OFF
--DWITH_IPP=OFF
--DWITH_HALIDE=OFF
--DWITH_VULKAN=OFF
--DWITH_INF_ENGINE=OFF
--DWITH_NGRAPH=OFF
--DWITH_OPENVX=OFF
--DWITH_GDCM=OFF
--DWITH_V4L=OFF
--DWITH_CLP=OFF
--DWITH_OPENCL=OFF
--DWITH_OPENCL_SVM=OFF
--DWITH_ITT=OFF
--DWITH_PROTOBUF=OFF
--DWITH_QUIRC=OFF
--DWITH_TENGINE=OFF
--DWITH_ONNX=OFF
--DBUILD_DOCS=OFF
--DBUILD_EXAMPLES=OFF
--DBUILD_PACKAGE=OFF
--DBUILD_PERF_TESTS=OFF
--DBUILD_TESTS=OFF
--DBUILD_OBJC=OFF
--DENABLE_PRECOMPILED_HEADERS=OFF
--DENABLE_FAST_MATH=OFF
--DCV_TRACE=OFF
--DBUILD_opencv_apps=OFF
--DBUILD_opencv_java=OFF
--DBUILD_opencv_gapi=OFF
--DBUILD_opencv_objc=OFF
--DBUILD_opencv_js=OFF
--DBUILD_opencv_ts=OFF
--DBUILD_opencv_python2=OFF
--DBUILD_opencv_python3=OFF
--DBUILD_opencv_dnn=OFF
--DBUILD_opencv_imgcodecs=ON
--DBUILD_opencv_videoio=OFF
--DBUILD_opencv_calib3d=OFF
--DBUILD_opencv_flann=OFF
--DBUILD_opencv_objdetect=OFF
--DBUILD_opencv_stitching=OFF
--DBUILD_opencv_ml=OFF
--DBUILD_opencv_world=ON
--DWITH_ADE=OFF
--DWITH_TBB=OFF
--DWITH_HPX=OFF
--DWITH_OPENMP=OFF
--DWITH_GCD=OFF
--DWITH_CONCURRENCY=OFF
--DWITH_PTHREADS_PF=OFF
+
+# 视频 I/O
+-DBUILD_opencv_videoio=ON
+-DWITH_FFMPEG=ON             # 使用内置 FFmpeg
+-DWITH_VFW=ON                # Windows Video for Windows 支持
+-DWITH_MSMF=ON               # Media Foundation（现代 Windows 视频捕获）
+
+# GUI
+-DBUILD_opencv_highgui=ON
+-DWITH_WIN32UI=ON            # Windows 原生窗口支持
+
+# 其他选项
+-DBUILD_EXAMPLES=OFF         # 不构建示例程序
+-DBUILD_TESTS=OFF            # 不构建测试程序
+-DBUILD_PERF_TESTS=OFF       # 不构建性能测试程序
