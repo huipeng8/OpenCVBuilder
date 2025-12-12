@@ -2,6 +2,9 @@ name: windows
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   windows:
@@ -24,13 +27,12 @@ jobs:
     name: windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
 
     env:
-      BUILD_SCRIPT: build-opencv4-win.ps1
+      BUILD_SCRIPT: build-opencv-win.ps1
       BUILD_OPTIONS: opencv4_cmake_options.txt
       PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
 
     steps:
-      # JDK 和 Ant 仍保留（虽然不用 Java，但不影响；可选移除）
-      - name: Set up JDK
+      - name: Set up JDK (optional, kept for compatibility)
         uses: actions/setup-java@v4
         with:
           java-version: '${{ matrix.ver.jdk }}'
@@ -41,14 +43,10 @@ jobs:
           optional-tasks: true
           version: ${{ matrix.ver.ant }}
 
-      - name: ant version
-        run: ant -version
+      - name: Checkout repo (scripts & config)
+        uses: actions/checkout@v5
 
-      # 检出主仓库（含脚本和 cmake 选项）
-      - uses: actions/checkout@v5
-
-      # 检出 opencv
-      - name: checkout opencv
+      - name: Checkout OpenCV
         uses: actions/checkout@v5
         with:
           repository: opencv/opencv
@@ -56,77 +54,67 @@ jobs:
           ref: ${{ matrix.ver.cv }}
           submodules: recursive
 
-      # 检出 opencv_contrib（关键！）
-      - name: checkout opencv_contrib
+      - name: Checkout OpenCV Contrib
         uses: actions/checkout@v5
         with:
           repository: opencv/opencv_contrib
           path: opencv_contrib
           ref: ${{ matrix.ver.cv }}
 
-      # 复制构建脚本和选项
-      - name: copy
+      - name: Copy build files
         run: |
           cp ${{ env.BUILD_SCRIPT }} opencv-${{ matrix.ver.cv }}
           cp ${{ env.BUILD_OPTIONS }} opencv-${{ matrix.ver.cv }}
 
-      # 构建（只一次）
-      - name: build
+      - name: Build OpenCV
         shell: powershell
         run: |
           cd opencv-${{ matrix.ver.cv }}
           .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }}
 
-      # 打包
-      - name: 7zip libs
+      - name: Package
         run: |
           cp -r opencv-${{ matrix.ver.cv }}/build-${{ matrix.arch }}-${{ matrix.list.vs_ver }}-${{ matrix.crt }}/install ${{ env.PKG_NAME }}
           7z a ${{ env.PKG_NAME }}.7z ${{ env.PKG_NAME }}
-          rm ${{ env.PKG_NAME }} -r -fo
+          rm -r -fo ${{ env.PKG_NAME }}
 
-      # 上传 artifact
-      - name: upload lib
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PKG_NAME }}
           path: ${{ env.PKG_NAME }}.7z
 
   release:
-    needs: [ windows ]
+    needs: windows
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v5
 
       - name: Unshallow
         run: git fetch --prune --unshallow
 
-      - name: Get git log
-        id: git-log
+      - name: Generate changelog
+        id: changelog
         run: |
-          previousTag=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`)
-          lastTag=$(git describe --abbrev=0 --tags)
-          log=$(git log $previousTag..$lastTag --pretty=format:'- %cd %an: %s\n' --date=format:'%Y-%m-%d %H:%M:%S')
-          echo "log_state=$log" >> $GITHUB_ENV
+          previous=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "first")
+          current=${GITHUB_REF#refs/tags/}
+          log=$(git log $previous..$current --pretty=format:'- %cd %an: %s' --date=short)
+          echo -e "$log\n" > release.md
 
-      - name: Generate Changelog
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          echo -e '${{ env.log_state }}' > release.md
-
-      - name: download
+      - name: Download artifacts
         uses: actions/download-artifact@v5
         with:
           path: artifacts
 
-      - name: list artifact
-        run: tree artifacts
+      - name: List artifacts
+        run: find artifacts -type f
 
-      - name: upload-windows
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           prerelease: false
           bodyFile: release.md
-          artifacts: artifacts/*/*.7z
+          artifacts: "artifacts/*/*.7z"
           allowUpdates: true
-          artifactContentType: application/x-7z-compressed
           token: ${{ secrets.GITHUB_TOKEN }}
