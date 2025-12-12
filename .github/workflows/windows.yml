@@ -27,7 +27,7 @@ jobs:
     name: windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
 
     env:
-      BUILD_SCRIPT: build-opencv-win.ps1
+      BUILD_SCRIPT: build-opencv4-win.ps1
       BUILD_OPTIONS: opencv4_cmake_options.txt
       PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
 
