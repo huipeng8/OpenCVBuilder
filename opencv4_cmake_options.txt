@@ -1,3 +1,5 @@
+-DWITH_IPP=ON
+
 # 启用 world 模块（生成单个 DLL）
 -DBUILD_opencv_world=ON
 
