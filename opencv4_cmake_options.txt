@@ -1,20 +1,19 @@
--DWITH_IPP=ON
+# =============================
+# OpenCV 4.x CMake Options (Base)
+# Shared by both /MD and /MT builds
+# =============================
 
-# 启用 world 模块（生成单个 DLL）
+# World module (single library)
 -DBUILD_opencv_world=ON
 
-# 禁用 Python（符合要求）
+# Disable Python
 -DBUILD_opencv_python2=OFF
 -DBUILD_opencv_python3=OFF
 
-# 启用 contrib（必须指定路径）
+# Extra modules (will be enabled/disabled per CRT mode in PS script)
 -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules
 
-# 启用 DNN（含 Protobuf）
--DBUILD_opencv_dnn=ON
--DWITH_PROTOBUF=ON
-
-# 图像编解码器（保持完整支持）
+# Image codecs (essential)
 -DBUILD_ZLIB=ON
 -DBUILD_JPEG=ON -DWITH_JPEG=ON
 -DBUILD_PNG=ON -DWITH_PNG=ON
@@ -27,17 +26,7 @@
 -DWITH_IMGCODEC_PXM=ON
 -DWITH_IMGCODEC_SUNRASTER=ON
 
-# 视频 I/O（可选，但推荐）
--DBUILD_opencv_videoio=ON
--DWITH_MSMF=ON
--DWITH_VFW=ON
--DWITH_FFMPEG=OFF  # 注意：若无预编译 FFmpeg，建议关闭，避免链接失败
-
-# GUI（可选）
--DBUILD_opencv_highgui=ON
--DWITH_WIN32UI=ON
-
-# 核心模块（world 会自动包含，但显式开启更安全）
+# Core modules (required for world)
 -DBUILD_opencv_core=ON
 -DBUILD_opencv_imgproc=ON
 -DBUILD_opencv_imgcodecs=ON
@@ -45,10 +34,9 @@
 -DBUILD_opencv_calib3d=ON
 -DBUILD_opencv_flann=ON
 
-# 禁用不需要的
+# Build control
 -DBUILD_TESTS=OFF
 -DBUILD_EXAMPLES=OFF
 -DBUILD_DOCS=OFF
 -DBUILD_PERF_TESTS=OFF
--DBUILD_JAVA=OFF
 -DBUILD_FAT_JAVA_LIB=OFF
