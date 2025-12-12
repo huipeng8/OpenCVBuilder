@@ -13,16 +13,11 @@ jobs:
         list:
           - { win_ver: 2022, vs_name: vs2022, vs_ver: v143 }
         arch:
-          [
-            x64,
-            x86,
-#            arm64,
-          ]
+          - x64
+          - x86
         crt:
-          [
-            md,
-            mt,
-          ]
+          - md
+          - mt
 
     runs-on: windows-${{ matrix.list.win_ver }}
 
@@ -32,10 +27,9 @@ jobs:
       BUILD_SCRIPT: build-opencv4-win.ps1
       BUILD_OPTIONS: opencv4_cmake_options.txt
       PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}
-      JAVA_PKG_NAME: opencv-${{ matrix.ver.cv }}-windows-${{ matrix.list.vs_name }}-${{ matrix.arch }}-${{ matrix.crt }}-java
 
     steps:
-      # Setup JDK
+      # JDK 和 Ant 仍保留（虽然不用 Java，但不影响；可选移除）
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -50,10 +44,10 @@ jobs:
       - name: ant version
         run: ant -version
 
-      # 检出代码
+      # 检出主仓库（含脚本和 cmake 选项）
       - uses: actions/checkout@v5
 
-      # 检出opencv
+      # 检出 opencv
       - name: checkout opencv
         uses: actions/checkout@v5
         with:
@@ -62,96 +56,71 @@ jobs:
           ref: ${{ matrix.ver.cv }}
           submodules: recursive
 
-      # 复制
+      # 检出 opencv_contrib（关键！）
+      - name: checkout opencv_contrib
+        uses: actions/checkout@v5
+        with:
+          repository: opencv/opencv_contrib
+          path: opencv_contrib
+          ref: ${{ matrix.ver.cv }}
+
+      # 复制构建脚本和选项
       - name: copy
         run: |
           cp ${{ env.BUILD_SCRIPT }} opencv-${{ matrix.ver.cv }}
           cp ${{ env.BUILD_OPTIONS }} opencv-${{ matrix.ver.cv }}
 
-      # 编译
-      # https://github.com/ilammy/msvc-dev-cmd  
-      #- uses: ilammy/msvc-dev-cmd@v1
-
+      # 构建（只一次）
       - name: build
         shell: powershell
         run: |
           cd opencv-${{ matrix.ver.cv }}
-          .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }} 
+          .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }}
 
+      # 打包
       - name: 7zip libs
         run: |
           cp -r opencv-${{ matrix.ver.cv }}/build-${{ matrix.arch }}-${{ matrix.list.vs_ver }}-${{ matrix.crt }}/install ${{ env.PKG_NAME }}
           7z a ${{ env.PKG_NAME }}.7z ${{ env.PKG_NAME }}
           rm ${{ env.PKG_NAME }} -r -fo
 
-      - name: build java
-        shell: powershell
-        run: |
-          cd opencv-${{ matrix.ver.cv }}
-          .\${{ env.BUILD_SCRIPT }} -VsArch ${{ matrix.arch }} -VsVer ${{ matrix.list.vs_ver }} -VsCRT ${{ matrix.crt }} -BuildJava
-
-      - name: 7zip java
-        run: |
-          cp -r opencv-${{ matrix.ver.cv }}/build-${{ matrix.arch }}-${{ matrix.list.vs_ver }}-${{ matrix.crt }}/install/java ${{ env.JAVA_PKG_NAME }}
-          7z a ${{ env.JAVA_PKG_NAME }}.7z ${{ env.JAVA_PKG_NAME }}
-          rm ${{ env.JAVA_PKG_NAME }} -r -fo
-
-      # 上传artifact
+      # 上传 artifact
       - name: upload lib
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PKG_NAME }}
           path: ${{ env.PKG_NAME }}.7z
 
-      - name: upload java lib
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.JAVA_PKG_NAME }}
-          path: ${{ env.JAVA_PKG_NAME }}.7z
-
   release:
     needs: [ windows ]
-
     runs-on: ubuntu-latest
-
     steps:
-      # 检出代码
       - uses: actions/checkout@v5
 
-      # 获取所有的git log和tag
       - name: Unshallow
         run: git fetch --prune --unshallow
 
-      # 获取git log 从 previousTag 到 lastTag
       - name: Get git log
         id: git-log
         run: |
           previousTag=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`)
           lastTag=$(git describe --abbrev=0 --tags)
-          echo "previousTag:$previousTag ~ lastTag:$lastTag"
           log=$(git log $previousTag..$lastTag --pretty=format:'- %cd %an: %s\n' --date=format:'%Y-%m-%d %H:%M:%S')
-          echo "$log"
-          echo "log_state="$log"" >> $GITHUB_ENV
+          echo "log_state=$log" >> $GITHUB_ENV
 
-      # 创建Changelog文件 triggered by git tag push
       - name: Generate Changelog
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           echo -e '${{ env.log_state }}' > release.md
 
-      # 下载artifact
       - name: download
         uses: actions/download-artifact@v5
         with:
           path: artifacts
 
-      # 查看artifact
       - name: list artifact
-        run: |
-          tree artifacts
+        run: tree artifacts
 
-      # 创建release 上传release
-      # https://github.com/marketplace/actions/create-release  
       - name: upload-windows
         uses: ncipollo/release-action@v1
         with:
