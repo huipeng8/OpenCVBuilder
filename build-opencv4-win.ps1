@@ -107,8 +107,9 @@ if (!(Test-Path -Path $OutPutPath)) {
 
 # Use absolute path for robustness
 $absOutPath = (Resolve-Path $OutPutPath).Path
+$genArgs += "-S ."                          # ←←← 新增这一行
 $genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
-$genArgs += "-B$absOutPath"
+$genArgs += "-B $absOutPath"                # 注意：加空格更安全（非必须，但推荐）
 
 # Generate
 $genCall = "cmake " + ($genArgs -join ' ')
