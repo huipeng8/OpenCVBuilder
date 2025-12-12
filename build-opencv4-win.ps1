@@ -1,11 +1,28 @@
 <#
-.SYNOPSIS build opencv for windows by benjaminwan
-.DESCRIPTION
-This is a powershell script for building OpenCV in Windows.
-Put this script in the OpenCV root path, then run: .\build-opencv4-win.ps1
+.SYNOPSIS
+Build OpenCV for Windows (with contrib, DNN, world module)
 
-ATTENTION:
-  Set ExecutionPolicy before running: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.DESCRIPTION
+This script builds OpenCV from source on Windows using CMake and Visual Studio.
+Place this script in the root of the OpenCV source directory.
+
+.PARAMETER VsArch
+Target architecture: x64 (default), x86, arm64, arm64ec
+
+.PARAMETER VsVer
+Visual Studio toolset: v143 (VS2022, default), v142 (VS2019), etc.
+
+.PARAMETER VsCRT
+CRT linkage: md (dynamic, default) or mt (static)
+
+.PARAMETER BuildJava
+Enable Java bindings (default: false)
+
+.PARAMETER BuildType
+CMake build type: Release (default), Debug, MinSizeRel, RelWithDebInfo
+
+.EXAMPLE
+.\build-opencv4-win.ps1 -VsArch x64 -VsVer v143 -VsCRT md
 #>
 
 param (
@@ -29,24 +46,29 @@ param (
     [string] $BuildType = 'Release'
 )
 
-# === 严格错误处理 ===
+# === Strict error handling ===
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"  # Speed up file ops in CI
 
 Clear-Host
-Write-Host "Params: VsArch=$VsArch VsVer=$VsVer VsCRT=$VsCRT BuildJava=$BuildJava BuildType=$BuildType"
+Write-Host "🔧 Build Parameters:"
+Write-Host "   Architecture : $VsArch"
+Write-Host "   VS Toolset   : $VsVer"
+Write-Host "   CRT Linkage  : $VsCRT"
+Write-Host "   Build Type   : $BuildType"
+Write-Host "   Build Java   : $BuildJava"
+Write-Host ""
 
-$genArgs = @()
-
-# Map architecture to CMake -A values
-switch ($VsArch) {
-    'x64'      { $ArchFlag = 'x64' }
-    'x86'      { $ArchFlag = 'Win32' }
-    'arm64'    { $ArchFlag = 'ARM64' }
-    'arm64ec'  { $ArchFlag = 'ARM64EC' }
+# === Map architecture to CMake -A values ===
+$ArchFlag = switch ($VsArch) {
+    'x64'      { 'x64' }
+    'x86'      { 'Win32' }
+    'arm64'    { 'ARM64' }
+    'arm64ec'  { 'ARM64EC' }
     default { throw "Unsupported architecture: $VsArch" }
 }
 
-# === Generator mapping (NO architecture suffix!) ===
+# === Generator name (no arch suffix!) ===
 $generator = switch ($VsVer) {
     'v140' { 'Visual Studio 14 2015' }
     'v141' { 'Visual Studio 15 2017' }
@@ -55,73 +77,83 @@ $generator = switch ($VsVer) {
     default { throw "Unsupported VS version: $VsVer" }
 }
 
-# ✅ CORRECT: Use -G without arch, and -A separately
-$genArgs += "-G '$generator'"
-$genArgs += "-A $ArchFlag"
-
-# Toolset (host=x64 is standard)
-$genArgs += "-T $VsVer,host=x64"
-
-# System info
-$genArgs += "-DCMAKE_SYSTEM_NAME=Windows"
-$genArgs += "-DCMAKE_SYSTEM_PROCESSOR=$ArchFlag"
-$genArgs += "-DCMAKE_BUILD_TYPE=$BuildType"
-$genArgs += "-DCMAKE_CONFIGURATION_TYPES=$BuildType"
-
-# Source and build directories (CRITICAL!)
-$genArgs += "-S ."  # ←←← Source is current directory
-
-# Load custom CMake options
-$OptionsFile = "opencv4_cmake_options.txt"
-if (!(Test-Path -Path $OptionsFile -PathType Leaf)) {
-    Write-Error "Error: Cannot find $OptionsFile"
-    exit 1
-}
-Get-Content "$OptionsFile" | ForEach-Object {
-    if ($_ -match '\S' -and -not $_.StartsWith('#')) {
-        $genArgs += $_
-    }
-}
-
-# ARM64 intrinsics workaround
-if ($VsArch -in @('arm64', 'arm64ec')) {
-    $genArgs += '-DCV_ENABLE_INTRINSICS=OFF'
-}
-
-# CRT linkage
-if ($VsCRT -eq 'mt') {
-    $genArgs += '-DBUILD_WITH_STATIC_CRT=ON'
-} else {
-    $genArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
-}
-
-# Java support (optional)
-if ($BuildJava) {
-    $genArgs += '-DBUILD_JAVA=ON'
-    $genArgs += '-DBUILD_opencv_java=ON'
-}
-
-# Output directory
+# === Build directory ===
 $OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
 if (!(Test-Path -Path $OutPutPath)) {
     New-Item -Path $OutPutPath -ItemType Directory | Out-Null
 }
-
-# Use absolute path for robustness
 $absOutPath = (Resolve-Path $OutPutPath).Path
-$genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
-$genArgs += "-B $absOutPath"  # ←←← Build directory
+Write-Host "📁 Build directory: $absOutPath"
 
-# Generate command
-$genCall = "cmake " + ($genArgs -join ' ')
-Write-Host "CMake configure command:"
-Write-Host $genCall
-Invoke-Expression $genCall
+# === CMake configure arguments (as array) ===
+$cmakeArgs = @(
+    '-S', '.',
+    '-B', $absOutPath,
+    '-G', $generator,
+    '-A', $ArchFlag,
+    "-T", "$VsVer,host=x64",
+    "-DCMAKE_SYSTEM_NAME=Windows",
+    "-DCMAKE_SYSTEM_PROCESSOR=$ArchFlag",
+    "-DCMAKE_BUILD_TYPE=$BuildType",
+    "-DCMAKE_CONFIGURATION_TYPES=$BuildType",
+    "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
+)
 
-# Build command
+# === Load custom CMake options ===
+$OptionsFile = "opencv4_cmake_options.txt"
+if (!(Test-Path -Path $OptionsFile -PathType Leaf)) {
+    Write-Error "❌ Error: Cannot find $OptionsFile"
+    exit 1
+}
+Write-Host "📄 Loading CMake options from: $OptionsFile"
+Get-Content "$OptionsFile" | ForEach-Object {
+    $line = $_.Trim()
+    if ($line -and -not $line.StartsWith('#')) {
+        $cmakeArgs += $line
+    }
+}
+
+# === Optional features ===
+if ($VsCRT -eq 'mt') {
+    $cmakeArgs += '-DBUILD_WITH_STATIC_CRT=ON'
+} else {
+    $cmakeArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
+}
+
+if ($BuildJava) {
+    $cmakeArgs += '-DBUILD_JAVA=ON'
+    $cmakeArgs += '-DBUILD_opencv_java=ON'
+}
+
+if ($VsArch -in @('arm64', 'arm64ec')) {
+    $cmakeArgs += '-DCV_ENABLE_INTRINSICS=OFF'
+}
+
+# === Run CMake configure ===
+Write-Host "`n⚙️ Running CMake configure..."
+Write-Host "Command: cmake $($cmakeArgs -join ' ')"
+& cmake @cmakeArgs
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "❌ CMake configure failed!"
+    exit $LASTEXITCODE
+}
+
+# === Run CMake build ===
 $LogicalProcessorsNum = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-$buildArgs = @('--build', $absOutPath, '--config', $BuildType, '--parallel', $LogicalProcessorsNum, '--target', 'install')
-$buildCall = "cmake " + ($buildArgs -join ' ')
-Write-Host "CMake build command:"
-Write-Host $buildCall
-Invoke-Expression $buildCall
+$buildArgs = @(
+    '--build', $absOutPath,
+    '--config', $BuildType,
+    '--parallel', $LogicalProcessorsNum,
+    '--target', 'install'
+)
+
+Write-Host "`n🔨 Running CMake build (parallel=$LogicalProcessorsNum)..."
+Write-Host "Command: cmake $($buildArgs -join ' ')"
+& cmake @buildArgs
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "❌ CMake build failed!"
+    exit $LASTEXITCODE
+}
+
+Write-Host "`n✅ Build completed successfully!"
+Write-Host "📦 Install prefix: $absOutPath/install"
