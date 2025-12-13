@@ -62,18 +62,34 @@ if ($VsArch -eq 'x86') {
 # === Toolset & system info ===
 $genArgs += "-T $VsVer,host=x64"
 $genArgs += "-DCMAKE_SYSTEM_NAME=Windows"
-$genArgs += "-DCMAKE_SYSTEM_PROCESSOR=$SystemProcessor"  # Use correct processor name for IPP
+$genArgs += "-DCMAKE_SYSTEM_PROCESSOR=$SystemProcessor"
 $genArgs += "-DCMAKE_BUILD_TYPE=$BuildType"
 $genArgs += "-DCMAKE_CONFIGURATION_TYPES=$BuildType"
 
-# === Load base CMake options ===
+# === Output path (clean build) ===
+$OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
+if (Test-Path -Path $OutPutPath) {
+    Remove-Item -Recurse -Force $OutPutPath
+    Write-Host "Cleaned previous build directory: $OutPutPath"
+}
+New-Item -Path $OutPutPath -ItemType Directory | Out-Null
+$absOutPath = (Resolve-Path $OutPutPath).Path
+
+# CRITICAL FIX: Add -S and -B FIRST to avoid "Ignoring extra path"
+$genArgs += "-S ."
+$genArgs += "-B$absOutPath"
+
+# === Load base CMake options from file ===
 $OptionsFile = "opencv4_cmake_options.txt"
 if (!(Test-Path -Path $OptionsFile -PathType Leaf)) {
     Write-Error "Error: Cannot find $OptionsFile"
     exit 1
 }
 Get-Content "$OptionsFile" | ForEach-Object {
-    if ($_ -match '^\s*[^#;]') { $genArgs += $_.Trim() }  # Skip comments and empty lines
+    $line = $_.Trim()
+    if ($line -and $line -notmatch '^\s*[#;]') {
+        $genArgs += $line
+    }
 }
 
 # === Architecture-specific fixes ===
@@ -83,10 +99,10 @@ if ($VsArch -in @('arm64', 'arm64ec')) {
 
 # === CRT linkage and build strategy ===
 if ($VsCRT -eq 'mt') {
-    # /MT: Static, minimal, no IPP
+    # /MT: Static, minimal, no IPP, no contrib
     $genArgs += '-DBUILD_SHARED_LIBS=OFF'
     $genArgs += '-DBUILD_WITH_STATIC_CRT=ON'
-    $genArgs += '-DWITH_IPP=OFF'               # Critical!
+    $genArgs += '-DWITH_IPP=OFF'
     $genArgs += '-DBUILD_opencv_dnn=OFF'
     $genArgs += '-DBUILD_opencv_videoio=OFF'
     $genArgs += '-DBUILD_opencv_highgui=OFF'
@@ -134,18 +150,15 @@ if ($VsCRT -eq 'mt') {
     $genArgs += '-DBUILD_opencv_photo=OFF'
     $genArgs += '-DBUILD_opencv_signal=OFF'
     $genArgs += '-DBUILD_opencv_stereo=OFF'
-    $genArgs += '-DBUILD_opencv_xfeatures2d=OFF'
-    # Keep core modules: core, imgproc, imgcodecs (via world)
 } else {
-    # /MD: Dynamic, full feature, with IPP
+    # /MD: Dynamic, full feature, with IPP and contrib
     $genArgs += '-DBUILD_SHARED_LIBS=ON'
     $genArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
-    # Enable contrib modules ONLY in /MD mode
+    # Only add contrib path here — and only once!
     $genArgs += '-DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules'
-    # WITH_IPP defaults to ON when compatible; no need to force
 }
 
-# === Java support (rarely needed) ===
+# === Java support ===
 if ($BuildJava) {
     $genArgs += '-DBUILD_JAVA=ON'
     $genArgs += '-DBUILD_opencv_java=ON'
@@ -154,17 +167,7 @@ if ($BuildJava) {
     $genArgs += '-DBUILD_opencv_java=OFF'
 }
 
-# === Output path (clean build) ===
-$OutPutPath = "build-$VsArch-$VsVer-$VsCRT"
-if (Test-Path -Path $OutPutPath) {
-    Remove-Item -Recurse -Force $OutPutPath
-    Write-Host "Cleaned previous build directory: $OutPutPath"
-}
-New-Item -Path $OutPutPath -ItemType Directory | Out-Null
-
-$absOutPath = (Resolve-Path $OutPutPath).Path
-$genArgs += "-S ."
-$genArgs += "-B$absOutPath"
+# === Install prefix (safe to add last) ===
 $genArgs += "-DCMAKE_INSTALL_PREFIX=$absOutPath/install"
 
 # === Generate ===
