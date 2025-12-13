@@ -10,9 +10,6 @@
 -DBUILD_opencv_python2=OFF
 -DBUILD_opencv_python3=OFF
 
-# Extra modules (will be enabled/disabled per CRT mode in PS script)
--DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules
-
 # Image codecs (essential)
 -DBUILD_ZLIB=ON
 -DBUILD_JPEG=ON -DWITH_JPEG=ON
