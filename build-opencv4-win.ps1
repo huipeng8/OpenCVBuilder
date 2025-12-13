@@ -44,7 +44,7 @@ switch ($VsArch) {
     default { throw "Unsupported architecture: $VsArch" }
 }
 
-# === Generator ===
+# === Generator and Architecture ===
 $generator = switch ($VsVer) {
     'v140' { 'Visual Studio 14 2015' }
     'v141' { 'Visual Studio 15 2017' }
@@ -53,10 +53,23 @@ $generator = switch ($VsVer) {
     default { throw "Unsupported VS version: $VsVer" }
 }
 
-if ($VsArch -eq 'x86') {
-    $genArgs += "-G '$generator'"
-} else {
-    $genArgs += "-G '$generator $ArchFlag'"
+# Base generator (without arch for modern VS)
+$genArgs += "-G '$generator'"
+
+# Handle architecture: use -A for VS2017+ (v141+), embed in name for v140
+if ($VsVer -in @('v141', 'v142', 'v143')) {
+    $cmakeArch = switch ($VsArch) {
+        'x64'      { 'x64' }
+        'x86'      { 'Win32' }
+        'arm64'    { 'ARM64' }
+        'arm64ec'  { 'ARM64EC' }
+        default { throw "Unsupported architecture for -A: $VsArch" }
+    }
+    $genArgs += "-A $cmakeArch"
+} elseif ($VsArch -ne 'x86') {
+    # VS2015 (v140): append arch to generator name
+    $suffix = if ($VsArch -eq 'x64') { ' Win64' } elseif ($VsArch -eq 'arm64') { ' ARM' } else { '' }
+    $genArgs[-1] = "-G '$generator$suffix'"
 }
 
 # === Toolset & system info ===
