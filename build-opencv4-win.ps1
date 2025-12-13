@@ -140,6 +140,8 @@ if ($VsCRT -eq 'mt') {
     # /MD: Dynamic, full feature, with IPP
     $genArgs += '-DBUILD_SHARED_LIBS=ON'
     $genArgs += '-DBUILD_WITH_STATIC_CRT=OFF'
+    # Enable contrib modules ONLY in /MD mode
+    $genArgs += '-DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules'
     # WITH_IPP defaults to ON when compatible; no need to force
 }
 
